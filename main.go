@@ -1,106 +1,117 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
+// Book struct (Model)
 type Book struct {
-	id           int64  `json: "id" gorm:"primary key"`
-	name         string `json: "name"`
-	author       string `json: "author"`
-	published_at string `json: "published_at"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Author      string `json:"author"`
+	PublishedAt string `json:"published_at"`
 }
 
-var db *gorm.DB
-
-func initDB() {
-	var err error
-	dataSourceName := "root:@tcp(localhost:3306)/?parseTime=True"
-	db, err = gorm.Open("mysql", dataSourceName)
-
-	if err != nil {
-		fmt.Println(err)
-		panic("failed to connect database")
-	}
-
-	// Create the database. This is a one-time step.
-	// Comment out if running multiple times - You may see an error otherwise
-	db.Exec("CREATE DATABASE orders_db")
-	db.Exec("USE orders_db")
-
-	// Migration to create tables for Order and Item schema
-	db.AutoMigrate(&Book{})
+// Author struct
+type Author struct {
+	Firstname string `json:"firstname"`
+	Lastname  string `json:"lastname"`
 }
 
-func main() {
-	router := mux.NewRouter()
-	// Create
-	router.HandleFunc("/book", createBook).Methods("POST")
-	// Read
-	router.HandleFunc("/book/{id}", getBook).Methods("GET")
-	// Read-all
-	router.HandleFunc("/book", getBook).Methods("GET")
-	// Update
-	router.HandleFunc("/book/{id}", updateBook).Methods("PUT")
-	// Delete
-	router.HandleFunc("/book/{id}", deleteBook).Methods("DELETE")
-	// Initialize db connection
-	initDB()
-
-	log.Fatal(http.ListenAndServe(":8080", router))
-}
-
-func createBook(w http.ResponseWriter, r *http.Request) {
-	var newBook Book
-	json.NewDecoder(r.Body).Decode(&newBook)
-	// Creates new order by inserting records in the `orders` and `items` table
-	db.Create(&newBook)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(newBook)
-}
+var books []Book
 
 func getBooks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	var newBooks Book
-	db.Preload("Items").Find(&newBooks)
-	json.NewEncoder(w).Encode(newBooks)
+	json.NewEncoder(w).Encode(books)
 }
 
 func getBook(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	params := mux.Vars(r)
-	inputOrderID := params["id"]
+	for _, item := range books {
+		if item.ID == params["id"] {
+			json.NewEncoder(w).Encode(item)
+			return
+		}
+	}
+	json.NewEncoder(w).Encode(&Book{})
+}
 
-	var newBook Book
-	db.Preload("Items").First(&newBook, inputOrderID)
-	json.NewEncoder(w).Encode(newBook)
+func createBook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	var book Book
+	_ = json.NewDecoder(r.Body).Decode(&book)
+	book.ID = strconv.Itoa(rand.Intn(100000000)) // Mock ID - not safe
+	books = append(books, book)
+	json.NewEncoder(w).Encode(book)
 }
 
 func updateBook(w http.ResponseWriter, r *http.Request) {
-	var updatedBook Book
-	json.NewDecoder(r.Body).Decode(&updatedBook)
-	db.Save(&updatedBook)
-
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(updatedBook)
+	params := mux.Vars(r)
+	for index, item := range books {
+		if item.ID == params["id"] {
+			books = append(books[:index], books[index+1:]...)
+			var book Book
+			_ = json.NewDecoder(r.Body).Decode(&book)
+			book.ID = params["id"]
+			books = append(books, book)
+			json.NewEncoder(w).Encode(book)
+			return
+		}
+	}
 }
 
 func deleteBook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	params := mux.Vars(r)
-	inputOrderID := params["id"]
-	// Convert `orderId` string param to uint64
-	id64, _ := strconv.ParseUint(inputOrderID, 10, 64)
-	// Convert uint64 to uint
-	idToDelete := uint(id64)
+	for index, item := range books {
+		if item.ID == params["id"] {
+			books = append(books[:index], books[index+1:]...)
+			break
+		}
+	}
+	json.NewEncoder(w).Encode(books)
+}
 
-	db.Where("id = ?", idToDelete).Delete(&Book{})
-	w.WriteHeader(http.StatusNoContent)
+// Main function
+func main() {
+
+	r := mux.NewRouter()
+
+	//books = append(books, Book{ID: "1", Name: "What Not to Do", Author: "Ikenna Oyiih", PublishedAt: "2020-05-14:Abuja"})
+
+	r.HandleFunc("/books", getBooks).Methods("GET")
+	r.HandleFunc("/books/{id}", getBook).Methods("GET")
+	r.HandleFunc("/books", createBook).Methods("POST")
+	r.HandleFunc("/books/{id}", updateBook).Methods("PUT")
+	r.HandleFunc("/books/{id}", deleteBook).Methods("DELETE")
+
+	log.Fatal(http.ListenAndServe(":5000", r))
+
+	//How do i reconcile these two parts with a middleware
+	//To be honest i Don't know
+
+	db, err := sql.Open("mysql", "root:Fuutonrasenshuriken#1@tcp(127.0.0.1)/books?charset=utf8&parseTime=True")
+	if err != nil {
+		panic(err.Error())
+	}
+	fmt.Println("Database opened")
+	defer db.Close()
+
+	insert, err := db.Query("INSERT INTO books_t VALUES ( 3, 'Sleep4weak', 'Ik', 'Abuja' )")
+	if err != nil {
+		panic(err.Error())
+	} else {
+		fmt.Println("Data added")
+	}
+	defer insert.Close()
 }
