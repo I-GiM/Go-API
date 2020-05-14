@@ -12,7 +12,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Book struct (Model)
 type Book struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -20,7 +19,6 @@ type Book struct {
 	PublishedAt string `json:"published_at"`
 }
 
-// Author struct
 type Author struct {
 	Firstname string `json:"firstname"`
 	Lastname  string `json:"lastname"`
@@ -82,7 +80,6 @@ func deleteBook(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(books)
 }
 
-// Main function
 func main() {
 
 	r := mux.NewRouter()
